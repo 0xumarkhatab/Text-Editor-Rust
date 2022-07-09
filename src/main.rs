@@ -3,14 +3,19 @@ extern crate term_cursor as cursor;
 use colored::*;
 #[warn(dead_code)]
 use std::{thread,time};
-use std::io::{stdin, self};
+use std::io::{stdin, self,Write, Read};
 use std::string::FromUtf16Error;
-
 use crossterm::event::{Event, KeyCode, KeyEvent};
 use crossterm::style::Stylize;
-/* modify */
 use crossterm::{event, terminal};
-/* add this line */
+
+use crate::reader::read_console_line;
+
+
+mod reader;
+
+
+
 struct CleanUp;
 
 fn clrscr() {
@@ -43,11 +48,16 @@ fn print_text_contents(string: &mut String, x_max: u64, y_max: u64, start_y: u64
     clrscr();
     println!(
         "{}{}\n{}",
-        format!("{}", format!("\t\t\tR-Edit").dark_green().bold()),
-        format!("\nMenu -> \t{}{}{}", format!("CTRL+S => Save").bold(),
-        format!("ALTL+Q => Exit").bold(),
-        format!("Enter and Delete Key features are not enabled yet.").bold()).underline_dark_green(),
-        snaps
+        
+            format!("{}", format!("\t\t\tR-Edit - Write Efficiently ").dark_green().bold()),
+            format!("\n{} -> \t{} {} {} {}", 
+                 format!("Menu").green() ,    
+                 format!("{} => Create New File ",format!("Ctrl + N").cyan()).bold() ,
+                 format!("{} => Save to File ",format!("Ctrl + S").cyan()).bold() ,
+                 format!("{} => Load from File ",format!("Ctrl + L").cyan()).bold()  ,
+                 format!("{} => Exit ",format!("Alt + Q").cyan()).bold() ),
+            snaps
+
     );
 
     return y_coord;
@@ -61,7 +71,7 @@ impl Drop for CleanUp {
 
 fn print_bottom(string: &str, y_max: u64, margin: u64) {
     set_cursor_position(30, y_max + margin);
-    println!("{}", format!("{}", string).bold());
+    println!("{}\n", format!("{}", string).bold());
 
 }
 
@@ -79,14 +89,14 @@ fn the_delay(n:u64){
 }
 
 fn startup(){
-    cursor::clear();
+   
    let mut dots=String::from(".");
    let colors=["green","red","cyan","aqua","blue","orange","yellow","maroon"];
    let n=colors.len();
    for i in (0..9) {
     clrscr();
-    println!("{}",format!("\t\t\tWelcome to {} \n\t\t\tThe Rust Based Text Editor",format!("R-Edit").color(colors[(i*2)%n])) );
-    println!("{}{}",format!("\n\n\t\t\tLoading").color(colors[(i*3)%n]),format!("{}",dots).color(colors[(i*6)%n]).bold());
+    println!("{}\n{}\r",format!("\t\t\tWelcome to {} \n\t\t\tThe Rust Based Text Editor",format!("R-Edit").color(colors[(i*2)%n])) ,
+     format!("{}{}",format!("\t\t\t  Loadig Modules").color(colors[(i*3)%n]),format!("{}",dots).color(colors[(i*6)%n]).bold()));
     if i%2 !=0{
         dots.push('.');
 
@@ -101,6 +111,30 @@ fn startup(){
 
 }
 
+fn load_from_file(fname:&mut String)->String{
+    let mut file  = std::fs::File::open(String::from("./")+fname).expect("file opening failed");
+    let mut buffer=String::from("");
+    let _res= file.read_to_string(&mut buffer);
+    return buffer;
+
+}
+
+fn save_to_file(string:String,fname:&mut String)->bool{
+    let mut file  = std::fs::File::create(String::from("./")+fname).expect("file creation failed");
+    file.write_all(string.as_bytes()).expect("File Writing Failed");
+    return true;
+
+}
+
+
+fn toggle_terminal_raw_mode(type_:u8){
+    if(type_==1){
+        terminal::enable_raw_mode();
+    }
+    else{
+    terminal::disable_raw_mode();     
+    }
+}
 fn main() -> crossterm::Result<()> {
 
 // ________________     Variables Declaration      __________________
@@ -129,14 +163,19 @@ startup();
 
 //      Taking control of Terminal 
     
-    terminal::enable_raw_mode()?;
+    toggle_terminal_raw_mode(1);
 
-//  _________________________________    
 
-//      Opening the Text Editor Interface    
-set_cursor_position(x_coord, y_coord);
-print_text_contents(&mut input.clone(), x_max, y_max, start_y);
+//  _________________________________    //
 
+//      Opening the Text Editor Interface  ///  
+
+let opening_note=String::from("Start from here ");
+print_text_contents(&mut String::from("-> Press any Key to start Writing "), x_max, y_max, start_y);
+event::read();
+print_text_contents(&mut input, x_max, y_max, start_y);
+
+//______________________________________ //
 
     Ok(loop {
         set_cursor_position(x_coord, y_coord);
@@ -151,9 +190,7 @@ print_text_contents(&mut input.clone(), x_max, y_max, start_y);
                     code: KeyCode::Char('q'),
                     modifiers: event::KeyModifiers::ALT,
                 } => {
-                    //     set_cursor_position(30,(y_max+4) );
-
-                    println!("Quitting !");
+                    print_bottom("Exiting - Thank You for using R-Edit", current_y+4, 4);
                     break;
                 }
 
@@ -161,7 +198,8 @@ print_text_contents(&mut input.clone(), x_max, y_max, start_y);
                     code: KeyCode::Char('c'),
                     modifiers: event::KeyModifiers::CONTROL,
                 } => {
-                    println!("Interrupted !");
+                    print_bottom("Interrupted - Thank You for using R-Edit", current_y+4, 4);
+
                     break;
                 }
                 KeyEvent {
@@ -169,21 +207,26 @@ print_text_contents(&mut input.clone(), x_max, y_max, start_y);
                     modifiers: event::KeyModifiers::CONTROL,
                 } => {
                     
-                    print_bottom("\nDo You want to Save your Work ? ", y_max, 4);
-                    {
-                       let _clean_up_ = CleanUp;
-                    }
+                    print_bottom("\n\n\t\t -- File Save Wizard-- \n\nDo You want to Save your Work ? ", y_max, 4);
+                    toggle_terminal_raw_mode(0);
+
                     let mut valid_statement=false;
                     while valid_statement==false{
                         println!("Y -> Yes\nN ->No");
-                        let mut  user_save_option=String::new();
-                        let _bytes_read= stdin().read_line(&mut user_save_option);
-                        let mut user_save_option =(user_save_option.trim()) ;
+                        let mut user_save_option =reader::read_console_line() ;
+                        let mut user_save_option=user_save_option.as_str();
+
     
-                        match user_save_option{
+                        match user_save_option.clone(){
                             "Y" | "y"=>{
                                 println!("Saving the file....");
+                                println!("\nEnter File name( eg data.txt ):= ");
+                                let file_name = read_console_line();
+                                save_to_file(input.clone(), &mut file_name.clone());
+
                                 valid_statement=true;
+                                println!("File saved Successfullly !");           
+
                             }
                             "N" | "n"=>{
                                 println!("File is not intended to be Saved");
@@ -197,11 +240,74 @@ print_text_contents(&mut input.clone(), x_max, y_max, start_y);
                         }
                         
                     }
+
+                    println!("Going back to edit mode !");           
+                    the_delay(4);
+                    toggle_terminal_raw_mode(1);
+                    print_text_contents(&mut input, x_max, y_max, start_y);
+                }
+                // Loading From File
+                KeyEvent {
+                    code: KeyCode::Char('l'),
+                    modifiers: event::KeyModifiers::CONTROL,
+                } => {
+                    toggle_terminal_raw_mode(0);
+                    print_bottom("\n\n\t\t --File Loading Wizard -- \n\nEnter File name ro Load from (e.g data.txt) ", y_max, 4);
+                    let mut file_name = read_console_line();
+                    let data = load_from_file(&mut file_name);
+                    input=data;
+                    println!("\nData Loaded Successfully !");
+
+                    println!("\nGoing back to edit mode with File Data !");           
+                    the_delay(4);
+                    toggle_terminal_raw_mode(1);
+                    print_text_contents(&mut input, x_max, y_max, start_y);
                     
-                    break;
+                
+
+                }
+                KeyEvent {
+                    code: KeyCode::Char('n'),
+                    modifiers: event::KeyModifiers::CONTROL,
+                } => {
+                    toggle_terminal_raw_mode(0);
+                    print_bottom("\n\n\t\t -- File Creation Wizard -- \n\nWe would suggest  saving the work with CTRL+S before ?\nSelect Options ", y_max, 4);
+                    toggle_terminal_raw_mode(0);
+
+                    let mut valid_statement=false;
+                        println!("Y -> Create New File \nN -> Cancel File Creation ");
+                        let mut user_save_option =reader::read_console_line() ;
+                        let mut user_save_option=user_save_option.as_str();
+    
+                        match user_save_option.clone(){
+                            "Y" | "y"=>{
+                                println!("\nEntering into new Workspace ...");
+                                input=String::from("");
+                                x_coord=0;
+                                y_coord=start_y;
+                                current_y=0;
+                            }
+                            "N" | "n"=>{
+                                println!("File is not intended to be Created");
+                                valid_statement=true;
+                            }
+                            
+                            _=>{
+                                println!("\n\n\t\tWhoopsInvalid Choice ....\nEnter Again to Save the Work\n")
+                                
+                            }
+                        }
+                            
+                    println!("\nGoing back to Edit mode !");           
+                    the_delay(4);
+                    toggle_terminal_raw_mode(1);
+                    print_text_contents(&mut input, x_max, y_max, start_y);
+                    
+                
 
                 }
 
+                
                 KeyEvent {
                     code: KeyCode::Char('z'),
                     modifiers: event::KeyModifiers::CONTROL,
@@ -213,6 +319,7 @@ print_text_contents(&mut input.clone(), x_max, y_max, start_y);
                     };
                     print_text_contents(&mut input, x_max, y_max, start_y);
                 }
+
                 KeyEvent {
                     code: KeyCode::Char('y'),
                     modifiers: event::KeyModifiers::CONTROL,
