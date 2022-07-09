@@ -2,7 +2,9 @@ extern crate colored;
 extern crate term_cursor as cursor;
 use colored::*;
 #[warn(dead_code)]
+use std::{thread,time};
 use std::io::{stdin, self};
+use std::string::FromUtf16Error;
 
 use crossterm::event::{Event, KeyCode, KeyEvent};
 use crossterm::style::Stylize;
@@ -11,47 +13,42 @@ use crossterm::{event, terminal};
 /* add this line */
 struct CleanUp;
 
-fn get_current_line(string: String, n: u8, x_max: u8, y_max: u8) {
-    let mut i = 0;
-    let mut numChunks = 0;
-    while i < string.len() && numChunks < n {
-        let mut final_x: usize = x_max.into();
-        if (i + final_x >= string.len()) {
-            final_x = string.len() - i;
-        }
-        let snap = &string[i..(i + final_x)];
-        println!("{}", snap);
-        i = i + (final_x);
-    }
-}
-
 fn clrscr() {
     print!("\x1B[2J\x1B[1;1H");
 }
 
-fn print_text_contents(string: &mut String, x_max: u8, y_max: u8, start_y: u8) -> u8 {
-    clrscr();
-    println!(
-        "{}",
-        format!("{}", format!("\t\t\tText Editor in Rust").green().bold()).underline_blue()
-    );
-
+fn print_text_contents(string: &mut String, x_max: u64, y_max: u64, start_y: u64) -> u64 {
+ 
     let mut i = 0;
     let mut y_coord = start_y;
+    let mut snaps=String::new();
     while i < string.len() {
-        let mut final_x: usize = x_max.into();
+        let mut final_x: usize = x_max.try_into().unwrap();
         if (i + final_x >= string.len()) {
             final_x = string.len() - i;
         } else {
             y_coord = y_coord + 1;
         }
-        let snap = &string[i..(i + final_x)];
-        println!("{}", snap);
+        let mut snap = &string[i..(i + final_x)];
+        //println!("{}", snap);
+        snaps.push_str(snap.clone());
+        snaps.push_str("\n");
+        
         i = i + (final_x);
         if y_coord > y_max {
             return y_coord;
         }
     }
+
+    clrscr();
+    println!(
+        "{}{}\n{}",
+        format!("{}", format!("\t\t\tR-Edit").dark_green().bold()),
+        format!("\nMenu -> \t{}{}{}", format!("CTRL+S => Save").bold(),
+        format!("ALTL+Q => Exit").bold(),
+        format!("Enter and Delete Key features are not enabled yet.").bold()).underline_dark_green(),
+        snaps
+    );
 
     return y_coord;
 }
@@ -62,51 +59,94 @@ impl Drop for CleanUp {
     }
 }
 
-fn print_bottom(string: &str, y_max: u8, margin: u8) {
+fn print_bottom(string: &str, y_max: u64, margin: u64) {
     set_cursor_position(30, y_max + margin);
-
     println!("{}", format!("{}", string).bold());
-}
-fn set_cursor_position(x: u8, y: u8) {
-    cursor::set_pos(x.into(), y.into());
-}
-fn get_num_lines(string:String,x_max:u8)->i32{
 
-    let mut i = 0;
-    let mut counter=0;
-    while i < string.len() {
-        i = i +x_max as usize ;
-        counter+=1;
-        
+}
+
+fn set_cursor_position(x: u64, y: u64) {
+    cursor::set_pos(x.try_into().unwrap(), y.try_into().unwrap());
+}
+
+fn the_delay(n:u64){
+    let half_second=time::Duration::from_millis(n*500);
+    let now=time::Instant::now();
+    thread::sleep(half_second);
+    assert!(now.elapsed()>=half_second);
+    
+    
+}
+
+fn startup(){
+    cursor::clear();
+   let mut dots=String::from(".");
+   let colors=["green","red","cyan","aqua","blue","orange","yellow","maroon"];
+   let n=colors.len();
+   for i in (0..9) {
+    clrscr();
+    println!("{}",format!("\t\t\tWelcome to {} \n\t\t\tThe Rust Based Text Editor",format!("R-Edit").color(colors[(i*2)%n])) );
+    println!("{}{}",format!("\n\n\t\t\tLoading").color(colors[(i*3)%n]),format!("{}",dots).color(colors[(i*6)%n]).bold());
+    if i%2 !=0{
+        dots.push('.');
+
     }
-    return counter;    
+    
+    
+    the_delay(1);
+    
+
+   }
+
+
 }
 
 fn main() -> crossterm::Result<()> {
+
+// ________________     Variables Declaration      __________________
+
+
     let _clean_up = CleanUp;
-    terminal::enable_raw_mode()?;
-    /* add the following */
-    let start_y: u8 = 1;
+    
+    let start_y: u64 = 2;
     let mut current_y = start_y;
-    let mut x_coord: u8 = 0;
-    let mut y_coord: u8 = start_y;
-    let x_max = 20;
-    let y_max = 8;
+    let mut x_coord: u64 = 0;
+    let mut y_coord: u64 = start_y;
+    let x_max = 100;
+    let y_max =100;
     let mut undoStack: Vec<String> = Vec::new();
     let mut redoStack: Vec<String> = Vec::new();
-
-    let mut input = String::from("");
-    print_text_contents(&mut input.clone(), x_max, y_max, start_y);
-
     let mut loopCounter = 0;
+    let mut input = String::from("");
+
+
+// ________________     Variables Declaration   Ended   __________________
+
+//  _______________             Startup Menu            __________________
+
+startup();
+
+
+//      Taking control of Terminal 
+    
+    terminal::enable_raw_mode()?;
+
+//  _________________________________    
+
+//      Opening the Text Editor Interface    
+set_cursor_position(x_coord, y_coord);
+print_text_contents(&mut input.clone(), x_max, y_max, start_y);
+
 
     Ok(loop {
         set_cursor_position(x_coord, y_coord);
-        //        println!("x_coord={} y_coord={} counter={}",x_coord,y_coord,loopCounter);
         loopCounter += 1;
-
         if let Event::Key(event) = event::read().expect("Reading Error from terminal") {
-            match event {
+          //Now We are Reading from Termiinal and Match the Key Events  
+
+
+          //        Matching Control Keys Events
+          match event {
                 KeyEvent {
                     code: KeyCode::Char('q'),
                     modifiers: event::KeyModifiers::ALT,
@@ -116,6 +156,7 @@ fn main() -> crossterm::Result<()> {
                     println!("Quitting !");
                     break;
                 }
+
                 KeyEvent {
                     code: KeyCode::Char('c'),
                     modifiers: event::KeyModifiers::CONTROL,
@@ -158,7 +199,7 @@ fn main() -> crossterm::Result<()> {
                     }
                     
                     break;
-                    
+
                 }
 
                 KeyEvent {
@@ -248,19 +289,19 @@ fn main() -> crossterm::Result<()> {
                             set_cursor_position(x_coord, y_coord);
                         } else if x_coord == 0 && y_coord == start_y {
                             //backspace
-                        } else if x_coord > input.len() as u8 {
+                        } else if x_coord > input.len() as u64 {
                             x_coord -= 1;
                             continue;
                         } else {
                             let mut index = (y_coord - start_y) * x_max + x_coord - 1;
 
-                            if index >= input.len() as u8 {
+                            if index >= input.len() as u64 {
                                 undoStack.push(input.clone());
-                                index = (input.len() as u8) - 1;
-                                input.remove(index.into()).to_string();
+                                index = (input.len() as u64) - 1;
+                                input.remove(index.try_into().unwrap()).to_string();
                             } else {
                                 undoStack.push(input.clone());
-                                input.remove((index).into()).to_string();
+                                input.remove(index.try_into().unwrap() ).to_string();
                             }
                             print_text_contents(&mut input, x_max, y_max, start_y);
 
@@ -270,15 +311,20 @@ fn main() -> crossterm::Result<()> {
                             if (x_coord == 0 && current_y > start_y) {
                                 current_y -= 1;
                             }
-                            //               set_cursor_position(x_coord,y_coord);
                         }
                     }
                 }
 
+                //      __________ Matching control Keys Ended _____________ 
+
+
+                //      __________ Having 
                 _ => {
                     let c = event.code;
-                    //             set_cursor_position(x_coord, y_coord);
+                    
                     match c {
+                        
+                        
                         KeyCode::Enter => {
                             if y_coord + 1 <= y_max {
                                 input.push_str(String::from(".").as_str());
@@ -290,6 +336,8 @@ fn main() -> crossterm::Result<()> {
                                 print_bottom("The Text has reached to maximum Capacity", y_max, 4);
                             }
                         }
+
+
                         KeyCode::Left => todo!(),
                         KeyCode::Right => todo!(),
                         KeyCode::Up => todo!(),
@@ -309,7 +357,7 @@ fn main() -> crossterm::Result<()> {
                             if (current_y <= y_max) {
                                 let mut index = (y_coord - start_y) * x_max + x_coord;
 
-                                if index >= input.len() as u8 {
+                                if index >= input.len() as u64 {
                                     input.push_str(String::from(s).as_str());
                                 } else if index > 0 {
                                     input.insert(index as usize, s);
@@ -320,7 +368,7 @@ fn main() -> crossterm::Result<()> {
                                 current_y = print_text_contents(&mut input, x_max, y_max, start_y);
                                 if (current_y != y_coord) {
                                     y_coord = current_y;
-                                    x_coord = (input.len() as u8 % x_max - 1);
+                                    x_coord = (input.len() as u64 % x_max - 1);
                                 }
 
                                 if (x_coord + 1 <= x_max) {
