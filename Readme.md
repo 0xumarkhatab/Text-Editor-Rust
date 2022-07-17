@@ -13,7 +13,6 @@
     - Colorized Terminal
     - Inserion of new text at the last
     - Insertion in the middle and Modification
-    -
     
     
 #### Limitations 
